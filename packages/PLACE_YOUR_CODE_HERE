@@ -1,1 +1,56 @@
 # INTENTIONALLY LEFT BLANK
+def get_steer_matrix_left_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
+    """
+    Args:
+        shape:              The shape of the steer matrix.
+
+    Return:
+        steer_matrix_left:  The steering (angular rate) matrix for Braitenberg-like control
+                            using the masked left lane markings (numpy.ndarray)
+    """
+
+    width = shape[1] // 2
+    height = shape[0]
+
+    steer_matrix_left_lane = np.zeros((height, shape[1]))
+
+    # Create ascending ramp: 0 → width-1
+    steer_unit = np.arange(width, dtype=float)
+
+    # Normalize (avoid divide-by-zero)
+    max_val = steer_unit.max()
+    if max_val != 0:
+        steer_unit /= max_val
+
+    steer_matrix_left_lane[:, :width] = 1 # CHANGE ME
+
+    return steer_matrix_left_lane
+
+
+def get_steer_matrix_right_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
+    """
+    Args:
+        shape:               The shape of the steer matrix.
+
+    Return:
+        steer_matrix_right:  The steering (angular rate) matrix for Braitenberg-like control
+                             using the masked right lane markings (numpy.ndarray)
+    """
+
+    width = shape[1] // 2
+    height = shape[0]
+
+    # Prepare the output
+    steer_matrix_right_lane = np.zeros((height, shape[1]))
+
+    # Create descending ramp from width → 1
+    steer_unit = np.arange(width, 0, -1).astype(float)
+
+    # Normalize if not all zeros
+    max_val = steer_unit.max()
+    if max_val != 0:
+        steer_unit /= max_val
+
+    steer_matrix_right_lane[:, width:] = 1 # CHANGE ME
+
+    return steer_matrix_right_lane

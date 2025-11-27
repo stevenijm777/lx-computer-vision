@@ -6,125 +6,97 @@ from dt_computer_vision.ground_projection import GroundProjector
 from dt_computer_vision.ground_projection.types import GroundPoint
 
 
-
 def get_steer_matrix_left_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
-    """
-    Args:
-        shape:              The shape of the steer matrix.
-
-    Return:
-        steer_matrix_left:  The steering (angular rate) matrix for Braitenberg-like control
-                            using the masked left lane markings (numpy.ndarray)
-    """
-
-    width = shape[1] // 2
     height = shape[0]
-
-    steer_matrix_left_lane = np.zeros((height, shape[1]))
-
-    # Create ascending ramp: 0 → width-1
-    steer_unit = np.arange(width, dtype=float)
-
-    # Normalize (avoid divide-by-zero)
-    max_val = steer_unit.max()
-    if max_val != 0:
-        steer_unit /= max_val
-
-    steer_matrix_left_lane[:, :width] = 1 # CHANGE ME
-
-    return steer_matrix_left_lane
-
+    width = shape[1] // 2 
+    steer_matrix_left = np.zeros(shape)
+    
+    # Tu lógica: rampa lineal negativa hasta -0.3
+    # Versión NumPy (Rápida):
+    # linspace genera los valores desde 0 hasta -0.3 automáticamente
+    steer_unit = np.linspace(0, -0.3, width)
+    
+    # Asignación directa (Sin bucles for)
+    steer_matrix_left[:, :width] = steer_unit
+    
+    return steer_matrix_left
 
 def get_steer_matrix_right_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
-    """
-    Args:
-        shape:               The shape of the steer matrix.
-
-    Return:
-        steer_matrix_right:  The steering (angular rate) matrix for Braitenberg-like control
-                             using the masked right lane markings (numpy.ndarray)
-    """
-
-    width = shape[1] // 2
     height = shape[0]
-
-    # Prepare the output
-    steer_matrix_right_lane = np.zeros((height, shape[1]))
-
-    # Create descending ramp from width → 1
-    steer_unit = np.arange(width, 0, -1).astype(float)
-
-    # Normalize if not all zeros
-    max_val = steer_unit.max()
-    if max_val != 0:
-        steer_unit /= max_val
-
-    steer_matrix_right_lane[:, width:] = 1 # CHANGE ME
-
-    return steer_matrix_right_lane
-
+    width = shape[1] // 2
+    steer_matrix_right = np.zeros(shape)
+    
+    # Tu lógica: rampa lineal positiva desde 0.1 hasta 0
+    # Versión NumPy (Rápida):
+    steer_unit = np.linspace(0.1, 0, width)
+    
+    # Asignación directa
+    steer_matrix_right[:, width:] = steer_unit
+    
+    return steer_matrix_right
 
 def detect_lane_markings(image: np.ndarray, projector: GroundProjector) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Args:
-        image: An image from the robot's camera in the BGR color space (numpy.ndarray)
-    Return:
-        left_masked_img:   Masked image for the dashed-yellow line (numpy.ndarray)
-        right_masked_img:  Masked image for the solid-white line (numpy.ndarray)
-    """
-
-    sigma = 8  # CHANGE ME - Gaussian blur sigma
-    threshold = 10  # CHANGE ME - minimum threshold for gradiant magnitude
-    white_lower_hsv = np.array([0, 0, 0])  # CHANGE ME - color thresholds
-    white_upper_hsv = np.array([179, 255, 255])  # CHANGE ME
-    yellow_lower_hsv = np.array([0, 0, 0])  # CHANGE ME
-    yellow_upper_hsv = np.array([179, 255, 255])  # CHANGE ME
+    
+    # 1. PARAMETROS (Mantenemos los tuyos que estaban bien)
+    sigma = 5
+    threshold = 25
+    
+    # 2. COLORES (Amplíamos un poco el amarillo para asegurar detección)
+    white_lower_hsv = np.array([0, 0, 100])         
+    white_upper_hsv = np.array([179, 60, 255])   
+    
+    # Amarillo ampliado (Hue de 10 a 40 en vez de 15-35)
+    yellow_lower_hsv = np.array([10, 50, 50])        
+    yellow_upper_hsv = np.array([40, 255, 255]) 
 
     h, w, _ = image.shape
+    imghsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    imggray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    imgbgr = image
-
-    # Convert the image to HSV for any color-based filtering
-    imghsv = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2HSV)
-
-    # Most of our operations will be performed on the grayscale version
-    imggray = cv2.cvtColor(imgbgr, cv2.COLOR_BGR2GRAY)
-
-    horizon = 270
+    # 3. HORIZONTE (Tu lógica estaba bien)
     if projector is not None:
-        far_away_point_ground = GroundPoint(x=10000000, y=0)
-        normalized_vector = projector.ground2vector(far_away_point_ground)
-        far_away_point_image = projector.camera.vector2pixel(normalized_vector)
-        horizon = far_away_point_image.as_integers()[0]
+        try:
+            far_away_point_ground = GroundPoint(x=10000000, y=0)
+            normalized_vector = projector.ground2vector(far_away_point_ground)
+            far_away_point_image = projector.camera.vector2pixel(normalized_vector)
+            horizon = far_away_point_image.as_integers()[0]
+        except:
+            horizon = h // 2
+    else:
+        horizon = h // 2
 
     mask_ground = np.zeros((h, w), dtype=np.uint8)
-    mask_ground[int(h - horizon + 50) :, :] = 1 # we add a small buffer to cut the entire horizon
+    # Reducimos el buffer de +30 a +10 para no cortar líneas lejanas útiles
+    mask_ground[int(horizon + 10) :, :] = 1 
 
-    # Smooth the image using a Gaussian kernel
+    # 4. FILTROS
     img_gaussian_filter = cv2.GaussianBlur(imggray, (0, 0), sigma)
-
-    # Convolve the image with the Sobel operator (filter) to compute the numerical derivatives in the x and y directions
     sobelx = cv2.Sobel(img_gaussian_filter, cv2.CV_64F, 1, 0)
     sobely = cv2.Sobel(img_gaussian_filter, cv2.CV_64F, 0, 1)
 
-    # Compute the magnitude of the gradients
+    # Magnitud
     Gmag = np.sqrt(sobelx * sobelx + sobely * sobely)
+    mask_mag = Gmag > threshold 
 
-    mask_mag = Gmag > threshold
-
+    # Colores
     mask_white = cv2.inRange(imghsv, white_lower_hsv, white_upper_hsv)
     mask_yellow = cv2.inRange(imghsv, yellow_lower_hsv, yellow_upper_hsv)
 
+    # División Izq/Der
     mask_left = np.ones(sobelx.shape)
-    mask_left[:, int(np.floor(w / 2)) : w + 1] = 0
+    mask_left[:, int(w / 2) :] = 0
     mask_right = np.ones(sobelx.shape)
-    mask_right[:, 0 : int(np.floor(w / 2))] = 0
+    mask_right[:, : int(w / 2)] = 0
 
-    mask_sobelx_pos = sobelx > 0
+    # Dirección Sobel X (Esto es lo más importante para saber izq/der)
     mask_sobelx_neg = sobelx < 0
-    mask_sobely_neg = sobely < 0
-
-    mask_left_edge = mask_ground * mask_left * mask_mag * mask_sobelx_neg * mask_sobely_neg * mask_yellow
-    mask_right_edge = mask_ground * mask_right * mask_mag * mask_sobelx_pos * mask_sobely_neg * mask_white
+    mask_sobelx_pos = sobelx > 0
+    
+    # --- CAMBIO CLAVE AQUÍ ---
+    # Quitamos 'mask_sobely_neg' de la multiplicación. 
+    # Esto hará que detecte líneas aunque estén un poco chuecas o el robot vibre.
+    
+    mask_left_edge = mask_ground * mask_left * mask_mag * mask_sobelx_neg * mask_yellow
+    mask_right_edge = mask_ground * mask_right * mask_mag * mask_sobelx_pos * mask_white
 
     return mask_left_edge, mask_right_edge
