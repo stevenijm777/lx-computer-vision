@@ -11,12 +11,11 @@ def get_steer_matrix_left_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
     width = shape[1] // 2 
     steer_matrix_left = np.zeros(shape)
     
-    # Tu lógica: rampa lineal negativa hasta -0.3
-    # Versión NumPy (Rápida):
-    # linspace genera los valores desde 0 hasta -0.3 automáticamente
+    # --- IZQUIERDA (Línea Amarilla) ---
+    # Mantenemos tu valor de -0.3, funciona bien para rectas.
+    # Gradiente: 0 (borde) -> -0.3 (centro)
     steer_unit = np.linspace(0, -0.3, width)
     
-    # Asignación directa (Sin bucles for)
     steer_matrix_left[:, :width] = steer_unit
     
     return steer_matrix_left
@@ -26,11 +25,17 @@ def get_steer_matrix_right_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
     width = shape[1] // 2
     steer_matrix_right = np.zeros(shape)
     
-    # Tu lógica: rampa lineal positiva desde 0.1 hasta 0
-    # Versión NumPy (Rápida):
-    steer_unit = np.linspace(0.1, 0, width)
+    # --- DERECHA (Línea Blanca) ---
+    # AQUÍ ESTÁ EL CAMBIO CRÍTICO:
+    # Antes tenías 0.1 (muy débil). Lo subimos a 0.5 o 0.6.
+    # Esto hace que la línea blanca "empuje" al robot con fuerza hacia la izquierda
+    # cuando entra en una intersección sin línea amarilla.
     
-    # Asignación directa
+    fuerza_blanca = 0.6  # Prueba con 0.5, 0.6 o hasta 0.8 si sigue chocando
+    
+    # Gradiente: fuerza_blanca (centro) -> 0 (borde derecho)
+    steer_unit = np.linspace(fuerza_blanca, 0, width)
+    
     steer_matrix_right[:, width:] = steer_unit
     
     return steer_matrix_right
