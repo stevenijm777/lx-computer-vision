@@ -10,11 +10,10 @@ def get_steer_matrix_left_lane_markings(shape: Tuple[int, int]) -> np.ndarray:
     height = shape[0]
     width = shape[1] // 2 
     steer_matrix_left = np.zeros(shape)
+    fuerza_amarilla = -0.85
     
     # --- IZQUIERDA (Línea Amarilla) ---
-    # Mantenemos tu valor de -0.3, funciona bien para rectas.
-    # Gradiente: 0 (borde) -> -0.3 (centro)
-    steer_unit = np.linspace(0, -0.3, width)
+    steer_unit = np.linspace(0, fuerza_amarilla, width)
     
     steer_matrix_left[:, :width] = steer_unit
     
@@ -44,7 +43,7 @@ def detect_lane_markings(image: np.ndarray, projector: GroundProjector) -> Tuple
     
     # 1. PARAMETROS (Mantenemos los tuyos que estaban bien)
     sigma = 5
-    threshold = 25
+    threshold = 50
     
     # 2. COLORES (Amplíamos un poco el amarillo para asegurar detección)
     white_lower_hsv = np.array([0, 0, 100])         
@@ -57,22 +56,13 @@ def detect_lane_markings(image: np.ndarray, projector: GroundProjector) -> Tuple
     h, w, _ = image.shape
     imghsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     imggray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # 3. HORIZONTE (Tu lógica estaba bien)
-    if projector is not None:
-        try:
-            far_away_point_ground = GroundPoint(x=10000000, y=0)
-            normalized_vector = projector.ground2vector(far_away_point_ground)
-            far_away_point_image = projector.camera.vector2pixel(normalized_vector)
-            horizon = far_away_point_image.as_integers()[0]
-        except:
-            horizon = h // 2
-    else:
-        horizon = h // 2
+    # 3. Horizonte (Correccion "Mirada alta")
+    # horizonte manual
+    horizon_manual = 100
 
     mask_ground = np.zeros((h, w), dtype=np.uint8)
     # Reducimos el buffer de +30 a +10 para no cortar líneas lejanas útiles
-    mask_ground[int(horizon + 10) :, :] = 1 
+    mask_ground[horizon_manual :, :] = 1 
 
     # 4. FILTROS
     img_gaussian_filter = cv2.GaussianBlur(imggray, (0, 0), sigma)
@@ -87,20 +77,19 @@ def detect_lane_markings(image: np.ndarray, projector: GroundProjector) -> Tuple
     mask_white = cv2.inRange(imghsv, white_lower_hsv, white_upper_hsv)
     mask_yellow = cv2.inRange(imghsv, yellow_lower_hsv, yellow_upper_hsv)
 
+    # 4. Cerebro dividido con "SOLAPAMIENTO"  (Overlap)
+    margin = 30
+
     # División Izq/Der
     mask_left = np.ones(sobelx.shape)
-    mask_left[:, int(w / 2) :] = 0
+    mask_left[:, int(w / 2) + margin:] = 0
     mask_right = np.ones(sobelx.shape)
-    mask_right[:, : int(w / 2)] = 0
+    mask_right[:, : int(w / 2)- margin] = 0
 
     # Dirección Sobel X (Esto es lo más importante para saber izq/der)
     mask_sobelx_neg = sobelx < 0
     mask_sobelx_pos = sobelx > 0
-    
-    # --- CAMBIO CLAVE AQUÍ ---
-    # Quitamos 'mask_sobely_neg' de la multiplicación. 
-    # Esto hará que detecte líneas aunque estén un poco chuecas o el robot vibre.
-    
+
     mask_left_edge = mask_ground * mask_left * mask_mag * mask_sobelx_neg * mask_yellow
     mask_right_edge = mask_ground * mask_right * mask_mag * mask_sobelx_pos * mask_white
 
